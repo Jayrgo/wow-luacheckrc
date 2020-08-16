@@ -24,3 +24,4 @@ This project is licensed under the MIT License.
 ## Acknowledgements
 * [Shields.io](https://shields.io)
 * [Ketho](https://github.com/Ketho)
+* [jagt](https://github.com/jagt)
