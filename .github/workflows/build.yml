@@ -1,0 +1,159 @@
+name: Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "Source"
+        required: true
+        default: "live"
+      commit:
+        description: "Commit message"
+        required: true
+        default: ""
+      tag:
+        description: "Tag"
+        required: true
+        default: ""
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Install Lua
+        uses: leafo/gh-actions-lua@v6
+      - name: Pull Source
+        run: |
+          git clone -q https://github.com/Ketho/BlizzardInterfaceResources.git source
+          git -C source checkout ${{ github.event.inputs.source }}
+      - name: Create Script
+        run: |
+          cat <<EOF > build.lua
+            local strformat = string.format
+
+            local GITHUB_WORKSPACE = arg[1]
+            local SOURCE_PATH = strformat('%s/%s', GITHUB_WORKSPACE, 'source/Resources/%s')
+
+            local strmatch = string.match
+
+            local function parseTable(tbl, result)
+                result = result or {}
+                local i = 1
+                while i <= #tbl do
+                    local global = tbl[i]
+                    if i < #tbl and strmatch(tbl[i + 1], '%.') then
+                        result[global] = {fields = {}}
+                        local fields = result[global].fields
+                        for i2 = i + 1, #tbl do
+                            local match = strmatch(tbl[i2], global .. '%.([%a%d_]+)')
+                            if match then
+                                fields[#fields + 1] = match
+                            else
+                                i = i2 - 1
+                                break
+                            end
+                        end
+                    else
+                        result[#result + 1] = global
+                    end
+                    i = i + 1
+                end
+                return result
+            end
+
+            local function parseGlobals(tbl, result)
+                result = result or {}
+                for k, v in pairs(tbl) do
+                    if k ~= '_G' then
+                        if type(v) == 'table' then
+                            result[k] = {fields = {}}
+                            parseGlobals(v, result[k].fields)
+                        else
+                            result[#result + 1] = k
+                        end
+                    end
+                end
+                return result
+            end
+
+            local read_globals = {
+              'LibStub'
+            }
+            local function insert(tbl)
+                for k, v in pairs(tbl) do
+                    if type(k) == 'number' then
+                        read_globals[#read_globals + 1] = v
+                    elseif type(k) == 'string' then
+                        read_globals[k] = v
+                    end
+                end
+            end
+
+            local TABLE_FILES = {'GlobalAPI.lua', 'FrameXML.lua', 'Frames.lua'}
+            for i = 1, #TABLE_FILES do
+                local tbl = dofile(strformat(SOURCE_PATH, TABLE_FILES[i]))
+                for i2 = 1, #tbl do insert(parseTable(tbl[i2])) end
+            end
+
+            local GLOBAL_FILES = {'LuaEnum.lua', 'GlobalStrings.lua'}
+            for i = 1, #GLOBAL_FILES do
+                local env = {}
+                env._G = env
+                loadfile(strformat(SOURCE_PATH, GLOBAL_FILES[i]), 't', env)()
+                insert(parseGlobals(env))
+            end
+
+            table.sort(read_globals)
+
+            local file = io.open(GITHUB_WORKSPACE .. '/.luacheckrc', 'w')
+
+            file:write(strformat('-- File created at %s', os.date('!%Y-%m-%dT%H:%M:%SZ')), '\n')
+            file:write('std = \'lua51\'', '\n')
+            file:write('max_line_length = false', '\n')
+            file:write('exclude_files = {\'**Libs/\', \'**libs/\'}', '\n')
+            file:write('ignore = {', '\n')
+            file:write('    \'212\', -- Unused argument', '\n')
+            file:write('}', '\n')
+            file:write('globals = {}', '\n')
+            file:write('read_globals = ',
+                      string.gsub(require('pprint').pformat(read_globals, {indent_size = 4, level_width = 120, wrap_array = true}),
+                                  '%s+\n', '\n'), '\n')
+            file:write('', '\n')
+
+            file:close()
+
+          EOF
+      - name: Get 'pprint.lua'
+        run: wget https://raw.githubusercontent.com/jagt/pprint.lua/master/pprint.lua
+      - name: Build
+        run: lua build.lua $GITHUB_WORKSPACE
+      - name: Create ZIP
+        run: zip luacheckrc.zip .luacheckrc
+      - name: Add & Commit
+        uses: EndBug/add-and-commit@v4.4.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          add: ".luacheckrc"
+          message: ${{ github.event.inputs.commit }}
+          tag: ${{ github.event.inputs.tag }}
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          release_name: ${{ github.event.inputs.tag }}
+      - name: Upload Release Asset
+        id: upload-release-asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: "./luacheckrc.zip"
+          asset_name: "luacheckrc.zip"
+          asset_content_type: "application/zip"
