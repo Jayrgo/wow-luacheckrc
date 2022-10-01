@@ -136,8 +136,6 @@ jobs:
         run: wget https://raw.githubusercontent.com/jagt/pprint.lua/master/pprint.lua
       - name: Parse
         run: lua parse.lua $GITHUB_WORKSPACE
-      - name: Create ZIP
-        run: zip luacheckrc.zip .luacheckrc
       - name: Add & Commit
         uses: EndBug/add-and-commit@v9
         env:
