@@ -6,7 +6,7 @@ on:
       source:
         description: "Source"
         required: true
-        default: "live"
+        default: "mainline"
       commit:
         description: "Commit message"
         required: true
