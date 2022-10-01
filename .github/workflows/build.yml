@@ -30,33 +30,30 @@ jobs:
           git -C source checkout ${{ github.event.inputs.source }}
       - name: Create Script
         run: |
-          cat <<EOF > build.lua
-            local strformat = string.format
-
+          cat <<EOF > parse.lua
             local GITHUB_WORKSPACE = arg[1]
-            local SOURCE_PATH = strformat('%s/%s', GITHUB_WORKSPACE, 'source/Resources/%s')
+            local SOURCE_PATH = string.format('%s/%s', GITHUB_WORKSPACE,
+                                              'source/Resources/%s')
 
-            local strmatch = string.match
-
-            local function parseTable(tbl, result)
+            local function getValues(tbl, result)
                 result = result or {}
                 local i = 1
                 while i <= #tbl do
-                    local global = tbl[i]
-                    if i < #tbl and strmatch(tbl[i + 1], '%.') then
-                        result[global] = {fields = {}}
-                        local fields = result[global].fields
-                        for i2 = i + 1, #tbl do
-                            local match = strmatch(tbl[i2], global .. '%.([%a%d_]+)')
-                            if match then
-                                fields[#fields + 1] = match
+                    local parent, value = string.match(tbl[i], '([%a%d_]+)%.([%a%d_]+)')
+                    if parent then
+                        local fields = {value}
+                        result[parent] = {fields = fields}
+                        for j = i + 1, #tbl do
+                            value = string.match(tbl[j], parent .. '%.([%a%d_]+)')
+                            if value then
+                                fields[#fields + 1] = value
                             else
-                                i = i2 - 1
+                                i = j - 1
                                 break
                             end
                         end
                     else
-                        result[#result + 1] = global
+                        result[#result + 1] = tbl[i]
                     end
                     i = i + 1
                 end
@@ -78,9 +75,7 @@ jobs:
                 return result
             end
 
-            local read_globals = {
-              'LibStub'
-            }
+            local read_globals = {'LibStub'}
             local function insert(tbl)
                 for k, v in pairs(tbl) do
                     if type(k) == 'number' then
@@ -91,44 +86,56 @@ jobs:
                 end
             end
 
-            local TABLE_FILES = {'GlobalAPI.lua', 'FrameXML.lua', 'Frames.lua'}
-            for i = 1, #TABLE_FILES do
-                local tbl = dofile(strformat(SOURCE_PATH, TABLE_FILES[i]))
-                for i2 = 1, #tbl do insert(parseTable(tbl[i2])) end
+            local SINGLE_TABLE_FILES = {'Mixins.lua'}
+            for i = 1, #SINGLE_TABLE_FILES do
+                insert(getValues(dofile(string.format(SOURCE_PATH, SINGLE_TABLE_FILES[i]))))
             end
 
-            local GLOBAL_FILES = {'LuaEnum.lua', 'GlobalStrings.lua'}
+            local MULTI_TABLE_FILES = {'GlobalAPI.lua', 'FrameXML.lua', 'Frames.lua'}
+            for i = 1, #MULTI_TABLE_FILES do
+                local tbl = dofile(string.format(SOURCE_PATH, MULTI_TABLE_FILES[i]))
+                for j = 1, #tbl do insert(getValues(tbl[j])) end
+            end
+
+            local GLOBAL_FILES = {'LuaEnum.lua', 'GlobalStrings/enUS.lua'}
             for i = 1, #GLOBAL_FILES do
                 local env = {}
                 env._G = env
-                loadfile(strformat(SOURCE_PATH, GLOBAL_FILES[i]), 't', env)()
+                loadfile(string.format(SOURCE_PATH, GLOBAL_FILES[i]), 't', env)()
                 insert(parseGlobals(env))
             end
 
             table.sort(read_globals)
 
-            local file = io.open(GITHUB_WORKSPACE .. '/.luacheckrc', 'w')
+            local file, errmsg = io.open(GITHUB_WORKSPACE .. '/.luacheckrc', 'w')
+            if file then
+                file:write('std = \'lua51\'', '\n')
+                file:write('max_line_length = false', '\n')
+                file:write('exclude_files = {\'**Libs/\', \'**libs/\'}', '\n')
+                file:write('ignore = {', '\n')
+                file:write('    \'212\', -- Unused argument', '\n')
+                file:write('}', '\n')
+                file:write('globals = {}', '\n')
+                file:write('read_globals = ',
+                    string.gsub(require('pprint').pformat(read_globals, {
+                    indent_size = 4,
+                    level_width = 120,
+                    wrap_array = true
+                }), '%s+\n', '\n'), '\n')
+                file:write('', '\n')
 
-            file:write(strformat('-- File created at %s', os.date('!%Y-%m-%dT%H:%M:%SZ')), '\n')
-            file:write('std = \'lua51\'', '\n')
-            file:write('max_line_length = false', '\n')
-            file:write('exclude_files = {\'**Libs/\', \'**libs/\'}', '\n')
-            file:write('ignore = {', '\n')
-            file:write('    \'212\', -- Unused argument', '\n')
-            file:write('}', '\n')
-            file:write('globals = {}', '\n')
-            file:write('read_globals = ',
-                      string.gsub(require('pprint').pformat(read_globals, {indent_size = 4, level_width = 120, wrap_array = true}),
-                                  '%s+\n', '\n'), '\n')
-            file:write('', '\n')
-
-            file:close()
+                file:close()
+            elseif errmsg then
+                error(errmsg)
+            else
+                error('cannot create file')
+            end
 
           EOF
       - name: Get 'pprint.lua'
         run: wget https://raw.githubusercontent.com/jagt/pprint.lua/master/pprint.lua
-      - name: Build
-        run: lua build.lua $GITHUB_WORKSPACE
+      - name: Parse
+        run: lua parse.lua $GITHUB_WORKSPACE
       - name: Create ZIP
         run: zip luacheckrc.zip .luacheckrc
       - name: Add & Commit
