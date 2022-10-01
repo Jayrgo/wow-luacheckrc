@@ -6,7 +6,7 @@ on:
       source:
         description: "Source"
         required: true
-        default: "mainline"
+        default: "wrath"
       commit:
         description: "Commit message"
         required: true
