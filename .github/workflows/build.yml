@@ -140,21 +140,3 @@ jobs:
           message: '${{ github.event.inputs.commit }}'
           tag: '${{ github.event.inputs.tag }} --force'
           tag_push: '--force'
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.event.inputs.tag }}
-          release_name: ${{ github.event.inputs.tag }}
-      - name: Upload Release Asset
-        id: upload-release-asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: "./luacheckrc.zip"
-          asset_name: "luacheckrc.zip"
-          asset_content_type: "application/zip"
