@@ -13,8 +13,10 @@
 
 
 ## Downloads
-* [Retail](https://raw.githubusercontent.com/Jayrgo/wow-luacheckrc/retail/.luacheckrc)
+* [Mainline](https://raw.githubusercontent.com/Jayrgo/wow-luacheckrc/mainline/.luacheckrc)
 * [Classic](https://raw.githubusercontent.com/Jayrgo/wow-luacheckrc/classic/.luacheckrc)
+* [Burning Crusade](https://raw.githubusercontent.com/Jayrgo/wow-luacheckrc/bc/.luacheckrc)
+* [Wrath of the Lich King](https://raw.githubusercontent.com/Jayrgo/wow-luacheckrc/wrath/.luacheckrc)
 
 
 ## License
