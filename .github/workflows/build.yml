@@ -22,8 +22,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-      - name: Install Lua
-        uses: leafo/gh-actions-lua@v6
+      - name: Install Lua/LuaJIT
+        uses: leafo/gh-actions-lua@v9
       - name: Pull Source
         run: |
           git clone -q https://github.com/Ketho/BlizzardInterfaceResources.git source
